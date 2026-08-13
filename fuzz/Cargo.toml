@@ -1,0 +1,44 @@
+[package]
+name = "soro-fuzz-targets"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Deliberately its own workspace root, not a member of the main
+# soro-fuzz workspace: cargo-fuzz needs nightly + libfuzzer-sys, which the
+# rest of the repo (stable, CI-tested) shouldn't have to pull in. This is
+# also why it's excluded from CI — see README/CONTRIBUTING for how to run
+# these targets locally (Linux/macOS/WSL only; see the Windows caveat).
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+soro-fuzz-core = { path = "../crates/core" }
+soro-fuzz-example-counter = { path = "../examples/counter" }
+soro-fuzz-example-token = { path = "../examples/token" }
+soro-fuzz-example-escrow = { path = "../examples/escrow" }
+soro-fuzz-invariants = { path = "../crates/invariants" }
+
+[[bin]]
+name = "counter_fuzz"
+path = "fuzz_targets/counter_fuzz.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "token_fuzz"
+path = "fuzz_targets/token_fuzz.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "escrow_fuzz"
+path = "fuzz_targets/escrow_fuzz.rs"
+test = false
+doc = false
+bench = false

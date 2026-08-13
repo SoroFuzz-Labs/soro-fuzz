@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/strategies",
+    "crates/invariants",
+    "examples/counter",
+    "examples/token",
+    "examples/escrow",
+]
+
+[workspace.package]
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/soro-fuzz/soro-fuzz"
