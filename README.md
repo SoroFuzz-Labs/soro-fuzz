@@ -18,10 +18,20 @@ Soroban already ships real building blocks for this:
   tests do.
 - [brson's `soroban-token-fuzzer`](https://github.com/brson/soroban-token-fuzzer)
   already proves out the "reusable driver + per-contract wiring" pattern —
-  for token contracts specifically.
+  for token contracts specifically. It's the closest prior art to this repo,
+  but it's pinned to a specific old commit of brson's personal fork of
+  `rs-soroban-sdk` (not the published `soroban-sdk` crate), with no activity
+  since early 2024; in practice it won't build against a current SDK without
+  manually checking out that old fork.
+- `rs-soroban-env` contains an internal, unpublished `soroban-fuzz-targets`
+  crate with reusable fuzz-target bodies — but it's aimed at fuzzing the
+  **host/env itself** for embedders invoking it programmatically, not at
+  giving a contract author an invariant harness to point at their own
+  contract.
 
 None of that gives you a *contract-agnostic* command-sequence-plus-shadow-model-plus-invariant
-harness. `soro-fuzz` is the generic version of the token-fuzzer's pattern:
+harness, maintained and published, that a contract author can just point at
+their contract. `soro-fuzz` is the generic version of the token-fuzzer's pattern:
 implement four small traits for your contract and you get command
 generation, arbitrary auth-subset generation, shadow-state tracking, and a
 reusable invariant library that goes beyond token semantics (no negative
@@ -78,9 +88,27 @@ The same `Run<Command>` type and the same `Harness` drive both entry points:
 `panic_with_error!`/declared-error semantics: the only acceptable failure
 modes are the contract's own declared errors (`Outcome::DeclaredError`) and
 host-level rejections like a failed `require_auth` (`Outcome::Rejected`).
-Anything else that panics is caught by the harness (`catch_unwind`) and is
-*always* a finding — this is enforced unconditionally in `Harness::run`, not
-left as an optional/disable-able `Invariant`.
+Anything else — a bare `panic!`, an `unwrap()`, an overflow — is *always* a
+finding (`Outcome::UndeclaredPanic`), enforced unconditionally, not left as
+an optional/disable-able `Invariant`.
+
+That last distinction is subtler than it looks: `soroban-sdk`'s generated
+`try_*` client methods represent a failed `require_auth` and an undeclared
+contract panic **identically**, as `Err(Err(InvokeError::Abort))` — there is
+no way to tell them apart from the `InvokeError` value alone. `Command`
+impls must not hand-match that nested `Result` and assume any non-declared
+error is a benign rejection (an earlier version of this harness did exactly
+that, and it silently swallowed real bugs as a result). Instead, every
+`Command::execute` classifies its `try_*` call through
+`Outcome::from_try_result(result, required_auth_satisfied, code_of)`, where
+`required_auth_satisfied` is something only the caller knows: whether this
+specific call needed no auth at all, or needed auth and every required
+address was in the step's `authorized` set. If auth was satisfied and the
+call still aborts, that can't legitimately be a rejection, so it's
+classified `UndeclaredPanic` instead of `Rejected` — see
+`crates/core/src/command.rs`'s doc comment on `Outcome::from_try_result` and
+`crates/core/tests/undeclared_panic_is_a_finding.rs` for the regression test
+proving it.
 
 ## Workspace layout
 
@@ -93,6 +121,7 @@ left as an optional/disable-able `Invariant`.
 | `examples/token` | A small fungible token (mint/burn/transfer). Wires the shared invariants — proves the harness generalizes past a toy example. |
 | `examples/escrow` | Deposit-then-release-or-refund with a deadline. A state machine and a strategy (`TimeAdvance`) with nothing in common with the token example, to prove the harness isn't secretly token-shaped. |
 | `fuzz/` | The `cargo-fuzz` driver crate — one `fuzz_targets/*.rs` per example. Deliberately its own workspace root (see its `Cargo.toml`), excluded from the main workspace and from CI. |
+| `crates/server` | The HTTP backend `soro-fuzz-web` talks to (axum: campaigns, runs, findings, SSE progress — see `docs/api-contract.md`). Reads a `targets.json` file from wherever `TARGETS_DIR` points at startup — today that's `examples/targets.json` in this repo, the only such file that exists; see "Related repos" below. |
 
 ## The traits you implement (the extension surface)
 
@@ -140,8 +169,11 @@ to your `Command` enum and derive `Arbitrary` on the enum as normal.
    build the initial model.
 5. **Implement `Command::execute`** — mock whatever auth the call needs
    (`env.mock_auths(&[MockAuth { .. }])`) based on whether the required
-   signer is in `authorizers`, then call the generated client's `try_*`
-   method and classify the result into an `Outcome`.
+   signer is in `authorizers` (have your mocking helper return whether it
+   was satisfied), then call the generated client's `try_*` method and
+   classify the result with `Outcome::from_try_result(result,
+   required_auth_satisfied, code_of)` — see "Execution model" above for why
+   hand-matching the result yourself is a trap.
 6. **Implement `Command::apply_to_model`** — mirror what a successful call
    does to the contract's real state.
 7. **Add an invariant** — either inline (contract-specific) or from
@@ -199,9 +231,19 @@ supported for this target`) — this was confirmed while building this repo,
 not a hypothetical. Everything else (`cargo build --workspace`,
 `cargo test --workspace`, the proptest mirrors) works natively on Windows.
 To actually run `cargo +nightly fuzz run <target>`, use WSL, Linux, or
-macOS. There's also a historical linking issue on macOS/arm64 with older
-`cargo-fuzz` versions; if `cargo fuzz build` fails to link there, try
-updating `cargo-fuzz` first (`cargo install cargo-fuzz --force`).
+macOS.
+
+**macOS**: `cargo-fuzz` currently needs `--sanitizer=thread` to work around
+a known linking failure on macOS — without it, `cargo fuzz build`/`cargo
+fuzz run` fail to link. Run it as:
+
+```sh
+cargo +nightly fuzz run --sanitizer=thread counter_fuzz
+```
+
+If it still fails to link after that, try updating `cargo-fuzz` itself
+(`cargo install cargo-fuzz --force`) — there's also a historical linking
+issue on macOS/arm64 with older `cargo-fuzz` versions.
 
 ## Quick start
 
@@ -212,9 +254,31 @@ cargo build --workspace
 # Run the proptest mirrors — this is what CI runs
 cargo test --workspace
 
-# Run a fuzz target for real (nightly, Linux/macOS/WSL only)
+# Run a fuzz target for real (nightly, Linux/WSL)
 cargo +nightly fuzz run counter_fuzz
+
+# ...or on macOS, which needs an extra flag (see "Windows / cargo-fuzz
+# caveat" above):
+cargo +nightly fuzz run --sanitizer=thread counter_fuzz
 ```
+
+## Related repos
+
+This repo is one of three in the soro-fuzz project:
+
+1. **soro-fuzz** (this repo) — the fuzzing engine (`crates/core`,
+   `crates/strategies`, `crates/invariants`) and the HTTP backend
+   (`crates/server`) built on it.
+2. **[soro-fuzz-contracts](https://github.com/SoroFuzz-Labs/soro-fuzz-contracts)**
+   — a separate suite of target contract crates, intended to eventually
+   supply the backend's target list. It isn't a drop-in yet: `crates/server`'s
+   target schema (`targets.rs`) and soro-fuzz-contracts' generated
+   `targets.manifest.json` (`crates/manifest`) differ in both filename and
+   field shape (no shared `schema_version`, `available_invariants` vs
+   `invariants`, etc.) — reading it would need schema reconciliation work,
+   not just pointing `TARGETS_DIR` at it.
+3. **[soro-fuzz-web](https://github.com/SoroFuzz-Labs/soro-fuzz-web)** — the
+   web dashboard that talks to `crates/server`.
 
 ## Future work (explicitly out of scope for now)
 
