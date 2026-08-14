@@ -4,6 +4,7 @@ members = [
     "crates/core",
     "crates/strategies",
     "crates/invariants",
+    "crates/server",
     "examples/counter",
     "examples/token",
     "examples/escrow",

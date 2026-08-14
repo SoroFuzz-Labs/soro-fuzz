@@ -1,0 +1,51 @@
+[package]
+name = "soro-fuzz-server"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "soro-fuzz-server"
+path = "src/main.rs"
+
+[dependencies]
+# Deliberately no dependency on soro-fuzz-core or any examples/* contract
+# crate: this server never links the fuzzing engine in-process. It
+# orchestrates the engine as a subprocess (see the runner module, phase 5)
+# and talks JSON/text across that boundary — the same reason it can never
+# accept an arbitrary uploaded WASM as a fuzz target.
+axum = { version = "0.8", features = ["json"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "net", "sync", "time", "process", "io-util"] }
+
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "postgres",
+    "macros",
+    "migrate",
+    "json",
+    "uuid",
+    "chrono",
+] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["serde", "v4"] }
+chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
+
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+async-trait = "0.1"
+thiserror = "1"
+anyhow = "1"
+dotenvy = "0.15"
+regex = "1"
+tokio-util = "0.7"
+async-stream = "0.3"
+futures = "0.3"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
