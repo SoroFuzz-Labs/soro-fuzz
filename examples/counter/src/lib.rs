@@ -48,18 +48,18 @@ impl CounterContract {
         Ok(new_count)
     }
 
-    pub fn reset(env: Env) -> i64 {
+    pub fn reset(env: Env) -> Result<i64, Error> {
         let admin: Address = env.storage().instance().get(&ADMIN).unwrap();
         admin.require_auth();
         env.storage().instance().set(&COUNT, &0i64);
-        0
+        Ok(0)
     }
 
-    pub fn set(env: Env, value: i64) -> i64 {
+    pub fn set(env: Env, value: i64) -> Result<i64, Error> {
         let admin: Address = env.storage().instance().get(&ADMIN).unwrap();
         admin.require_auth();
         env.storage().instance().set(&COUNT, &value);
-        value
+        Ok(value)
     }
 
     pub fn get(env: Env) -> i64 {

@@ -65,30 +65,19 @@ impl Command<CounterAdapter> for CounterCommand {
         let client = CounterContractClient::new(ctx.env, ctx.contract_id);
 
         match self {
-            CounterCommand::Increment => match client.try_increment() {
-                Ok(Ok(_)) => Outcome::Ok,
-                Err(Ok(e)) => Outcome::DeclaredError(e as u32),
-                Err(Err(invoke_err)) => Outcome::Rejected(format!("{invoke_err:?}")),
-                Ok(Err(conv_err)) => panic!("increment: unexpected value conversion error: {conv_err:?}"),
-            },
-            CounterCommand::Decrement => match client.try_decrement() {
-                Ok(Ok(_)) => Outcome::Ok,
-                Err(Ok(e)) => Outcome::DeclaredError(e as u32),
-                Err(Err(invoke_err)) => Outcome::Rejected(format!("{invoke_err:?}")),
-                Ok(Err(conv_err)) => panic!("decrement: unexpected value conversion error: {conv_err:?}"),
-            },
+            // No auth involved, so `required_auth_satisfied` is
+            // unconditionally true: an Abort here can't be attributed to
+            // withheld auth, so it can only be an undeclared bug.
+            CounterCommand::Increment => Outcome::from_try_result(client.try_increment(), true, |e| e as u32),
+            CounterCommand::Decrement => Outcome::from_try_result(client.try_decrement(), true, |e| e as u32),
             CounterCommand::Reset => {
-                mock_admin_auth(ctx.env, ctx.contract_id, &admin, authorizers, "reset", soroban_sdk::vec![ctx.env]);
-                match client.try_reset() {
-                    Ok(Ok(_)) => Outcome::Ok,
-                    Err(Ok(e)) => Outcome::DeclaredError(e.get_code()),
-                    Err(Err(invoke_err)) => Outcome::Rejected(format!("{invoke_err:?}")),
-                    Ok(Err(conv_err)) => panic!("reset: unexpected value conversion error: {conv_err:?}"),
-                }
+                let auth_satisfied =
+                    mock_admin_auth(ctx.env, ctx.contract_id, &admin, authorizers, "reset", soroban_sdk::vec![ctx.env]);
+                Outcome::from_try_result(client.try_reset(), auth_satisfied, |e| e as u32)
             }
             CounterCommand::Set(value) => {
                 let value = value.get() as i64;
-                mock_admin_auth(
+                let auth_satisfied = mock_admin_auth(
                     ctx.env,
                     ctx.contract_id,
                     &admin,
@@ -96,12 +85,7 @@ impl Command<CounterAdapter> for CounterCommand {
                     "set",
                     soroban_sdk::vec![ctx.env, value.into_val(ctx.env)],
                 );
-                match client.try_set(&value) {
-                    Ok(Ok(_)) => Outcome::Ok,
-                    Err(Ok(e)) => Outcome::DeclaredError(e.get_code()),
-                    Err(Err(invoke_err)) => Outcome::Rejected(format!("{invoke_err:?}")),
-                    Ok(Err(conv_err)) => panic!("set: unexpected value conversion error: {conv_err:?}"),
-                }
+                Outcome::from_try_result(client.try_set(&value), auth_satisfied, |e| e as u32)
             }
         }
     }
@@ -149,7 +133,10 @@ impl Invariant<CounterAdapter> for CounterValueMatchesModel {
 
 /// Mocks `admin`'s authorization for `contract_id.fn_name(args)` iff `admin`
 /// is one of the addresses this step authorized; otherwise mocks nothing,
-/// so the contract's `require_auth()` legitimately fails.
+/// so the contract's `require_auth()` legitimately fails. Returns whether
+/// auth was actually satisfied, so the caller can pass it to
+/// `Outcome::from_try_result` and correctly distinguish an expected auth
+/// rejection from an undeclared panic.
 fn mock_admin_auth(
     env: &Env,
     contract_id: &Address,
@@ -157,8 +144,9 @@ fn mock_admin_auth(
     authorizers: &[Address],
     fn_name: &str,
     args: soroban_sdk::Vec<soroban_sdk::Val>,
-) {
-    if authorizers.contains(admin) {
+) -> bool {
+    let satisfied = authorizers.contains(admin);
+    if satisfied {
         let invoke = MockAuthInvoke {
             contract: contract_id,
             fn_name,
@@ -172,6 +160,7 @@ fn mock_admin_auth(
     } else {
         env.mock_auths(&[]);
     }
+    satisfied
 }
 
 #[cfg(test)]
@@ -257,5 +246,182 @@ mod tests {
             step_index: 0,
         };
         assert!(CounterValueMatchesModel.check(&ctx).is_err());
+    }
+}
+#[cfg(test)]
+mod broken_counter {
+    //! Divergence-path proof (counterpart to core's `undeclared_panic_is_a_finding`):
+    //! a deliberately broken counter whose `increment` adds 2 instead of 1, driven
+    //! through the real `Harness` loop so the invariant is forced to fire. Proves the
+    //! fuzzer catches a state-divergence bug end to end — not just that `.check()`
+    //! returns `Err` when handed a wrong model in isolation.
+
+    use super::*; // CounterCommand, CounterModel, mock_admin_auth
+    use soro_fuzz_core::{
+        AddressPool, AuthSelection, Command, ContractAdapter, ExecContext, Harness, Invariant,
+        InvariantCtx, Outcome, Run, Step, Violation,
+    };
+    use soroban_sdk::{contract, contracterror, contractimpl, symbol_short, Address, Env, IntoVal, Symbol};
+
+    const COUNT: Symbol = symbol_short!("COUNT");
+    const ADMIN: Symbol = symbol_short!("ADMIN");
+
+    #[contracterror]
+    #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+    #[repr(u32)]
+    pub enum BrokenError {
+        Overflow = 1,
+        Underflow = 2,
+    }
+
+    /// Identical to `CounterContract` except `increment` adds 2 — so the model's
+    /// expected `+1` and the on-chain `+2` disagree from the very first increment.
+    #[contract]
+    pub struct BrokenCounterContract;
+
+    #[contractimpl]
+    impl BrokenCounterContract {
+        pub fn __constructor(env: Env, admin: Address) {
+            env.storage().instance().set(&ADMIN, &admin);
+            env.storage().instance().set(&COUNT, &0i64);
+        }
+        pub fn increment(env: Env) -> Result<i64, BrokenError> {
+            let count: i64 = env.storage().instance().get(&COUNT).unwrap_or(0);
+            let new_count = count.checked_add(2).ok_or(BrokenError::Overflow)?; // BUG: +2, not +1
+            env.storage().instance().set(&COUNT, &new_count);
+            Ok(new_count)
+        }
+        pub fn decrement(env: Env) -> Result<i64, BrokenError> {
+            let count: i64 = env.storage().instance().get(&COUNT).unwrap_or(0);
+            let new_count = count.checked_sub(1).ok_or(BrokenError::Underflow)?;
+            env.storage().instance().set(&COUNT, &new_count);
+            Ok(new_count)
+        }
+        pub fn reset(env: Env) -> Result<i64, BrokenError> {
+            let admin: Address = env.storage().instance().get(&ADMIN).unwrap();
+            admin.require_auth();
+            env.storage().instance().set(&COUNT, &0i64);
+            Ok(0)
+        }
+        pub fn set(env: Env, value: i64) -> Result<i64, BrokenError> {
+            let admin: Address = env.storage().instance().get(&ADMIN).unwrap();
+            admin.require_auth();
+            env.storage().instance().set(&COUNT, &value);
+            Ok(value)
+        }
+        pub fn get(env: Env) -> i64 {
+            env.storage().instance().get(&COUNT).unwrap_or(0)
+        }
+    }
+
+    /// Registers the *broken* contract but reuses the counter's existing
+    /// `CounterCommand` / `CounterModel` — the model still predicts correct
+    /// behaviour, which is exactly what makes it diverge.
+    pub struct BrokenCounterAdapter;
+
+    impl ContractAdapter for BrokenCounterAdapter {
+        type Command = CounterCommand;
+        type Model = CounterModel;
+
+        fn setup(env: &Env, addresses: &AddressPool) -> (Address, Self::Model) {
+            let admin = addresses.get(0).clone();
+            let contract_id =
+                env.register(BrokenCounterContract, BrokenCounterContractArgs::__constructor(&admin));
+            (contract_id, CounterModel::default())
+        }
+    }
+
+    impl Command<BrokenCounterAdapter> for CounterCommand {
+        fn execute(&self, ctx: &ExecContext, authorizers: &[Address]) -> Outcome {
+            let admin = ctx.addresses.get(0).clone();
+            let client = BrokenCounterContractClient::new(ctx.env, ctx.contract_id);
+            match self {
+                CounterCommand::Increment => Outcome::from_try_result(client.try_increment(), true, |e| e as u32),
+                CounterCommand::Decrement => Outcome::from_try_result(client.try_decrement(), true, |e| e as u32),
+                CounterCommand::Reset => {
+                    let ok = mock_admin_auth(ctx.env, ctx.contract_id, &admin, authorizers, "reset", soroban_sdk::vec![ctx.env]);
+                    Outcome::from_try_result(client.try_reset(), ok, |e| e as u32)
+                }
+                CounterCommand::Set(value) => {
+                    let value = value.get() as i64;
+                    let ok = mock_admin_auth(ctx.env, ctx.contract_id, &admin, authorizers, "set", soroban_sdk::vec![ctx.env, value.into_val(ctx.env)]);
+                    Outcome::from_try_result(client.try_set(&value), ok, |e| e as u32)
+                }
+            }
+        }
+
+        fn apply_to_model(&self, model: &mut CounterModel, _addresses: &AddressPool, outcome: &Outcome) {
+            if !outcome.is_ok() {
+                return;
+            }
+            // The model predicts CORRECT (+1) behaviour — that's what makes it
+            // disagree with the broken contract's +2.
+            match self {
+                CounterCommand::Increment => model.expected_count = model.expected_count.saturating_add(1),
+                CounterCommand::Decrement => model.expected_count = model.expected_count.saturating_sub(1),
+                CounterCommand::Reset => model.expected_count = 0,
+                CounterCommand::Set(value) => model.expected_count = value.get() as i64,
+            }
+        }
+    }
+
+    /// A distinct invariant type for the broken adapter, so `CounterValueMatchesModel`
+    /// keeps implementing `Invariant` for exactly one adapter (no ambiguity).
+    pub struct BrokenValueMatchesModel;
+
+    impl Invariant<BrokenCounterAdapter> for BrokenValueMatchesModel {
+        fn name(&self) -> &'static str {
+            "counter-value-matches-model"
+        }
+        fn check(&self, ctx: &InvariantCtx<BrokenCounterAdapter>) -> Result<(), Violation> {
+            let client = BrokenCounterContractClient::new(ctx.env, ctx.contract_id);
+            let actual = client.get();
+            if actual != ctx.model.expected_count {
+                return Err(Violation {
+                    invariant: self.name(),
+                    message: format!("on-chain count {actual} != model's expected count {}", ctx.model.expected_count),
+                    step_index: ctx.step_index,
+                });
+            }
+            Ok(())
+        }
+    }
+
+    fn harness() -> Harness<BrokenCounterAdapter> {
+        Harness::<BrokenCounterAdapter>::new().with_invariant(BrokenValueMatchesModel)
+    }
+
+    fn step(command: CounterCommand, authorized_indices: Vec<u8>) -> Step<CounterCommand> {
+        Step {
+            command,
+            authorized: AuthSelection::from_indices(authorized_indices),
+            advance_time: None,
+        }
+    }
+
+    #[test]
+    fn broken_increment_is_a_finding() {
+        // One increment: the broken contract lands on 2, the model expects 1.
+        let run = Run { steps: vec![step(CounterCommand::Increment, vec![])] };
+        let violation = harness().run(run).expect_err("a broken counter must be caught by the harness");
+        assert_eq!(violation.invariant, "counter-value-matches-model");
+        assert_eq!(violation.step_index, 0);
+    }
+
+    use proptest::prelude::*;
+    use proptest_arbitrary_interop::arb;
+
+    proptest! {
+        #[test]
+        fn broken_increment_is_caught_under_any_continuation(tail in arb::<Run<CounterCommand>>()) {
+            // The run always begins with an increment (the broken path). The contract
+            // starts at 0, so that first step always succeeds and diverges (2 vs 1), and
+            // the harness checks invariants after each step — so it's caught at step 0
+            // no matter what proptest appends after it.
+            let mut steps = vec![step(CounterCommand::Increment, vec![])];
+            steps.extend(tail.steps);
+            let run = Run { steps };
+            prop_assert!(harness().run(run).is_err(), "broken increment slipped past the harness");
+        }
     }
 }
