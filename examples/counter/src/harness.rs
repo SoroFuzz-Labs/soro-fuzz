@@ -256,7 +256,7 @@ mod broken_counter {
     //! fuzzer catches a state-divergence bug end to end — not just that `.check()`
     //! returns `Err` when handed a wrong model in isolation.
 
-    use super::*; // CounterCommand, CounterModel, mock_admin_auth
+    use super::{CounterCommand, CounterModel, mock_admin_auth};
     use soro_fuzz_core::{
         AddressPool, AuthSelection, Command, ContractAdapter, ExecContext, Harness, Invariant,
         InvariantCtx, Outcome, Run, Step, Violation,
@@ -365,7 +365,7 @@ mod broken_counter {
         }
     }
 
-    /// A distinct invariant type for the broken adapter, so `CounterValueMatchesModel`
+    /// Distinct invariant type for the broken adapter, so `CounterValueMatchesModel`
     /// keeps implementing `Invariant` for exactly one adapter (no ambiguity).
     pub struct BrokenValueMatchesModel;
 
@@ -416,8 +416,8 @@ mod broken_counter {
         fn broken_increment_is_caught_under_any_continuation(tail in arb::<Run<CounterCommand>>()) {
             // The run always begins with an increment (the broken path). The contract
             // starts at 0, so that first step always succeeds and diverges (2 vs 1), and
-            // the harness checks invariants after each step — so it's caught at step 0
-            // no matter what proptest appends after it.
+            // the harness checks invariants after each step — caught at step 0 no matter
+            // what proptest appends after it.
             let mut steps = vec![step(CounterCommand::Increment, vec![])];
             steps.extend(tail.steps);
             let run = Run { steps };
