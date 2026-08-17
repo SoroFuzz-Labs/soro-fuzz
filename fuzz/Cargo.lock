@@ -1736,6 +1736,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "soro-fuzz-example-escrow"
+version = "0.1.0"
+dependencies = [
+ "arbitrary",
+ "soro-fuzz-core",
+ "soro-fuzz-invariants",
+ "soro-fuzz-strategies",
+ "soroban-sdk",
+]
+
+[[package]]
+name = "soro-fuzz-example-token"
+version = "0.1.0"
+dependencies = [
+ "arbitrary",
+ "soro-fuzz-core",
+ "soro-fuzz-invariants",
+ "soro-fuzz-strategies",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "soro-fuzz-invariants"
 version = "0.1.0"
 dependencies = [
@@ -1760,6 +1782,9 @@ dependencies = [
  "libfuzzer-sys",
  "soro-fuzz-core",
  "soro-fuzz-example-counter",
+ "soro-fuzz-example-escrow",
+ "soro-fuzz-example-token",
+ "soro-fuzz-invariants",
 ]
 
 [[package]]

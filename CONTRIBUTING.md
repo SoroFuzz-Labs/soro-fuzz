@@ -89,6 +89,12 @@ step by step. Checklist:
       `testutils = ["soroban-sdk/testutils"]` and `crate-type = ["rlib"]`
       (see `examples/counter/Cargo.toml`'s comment for why not `cdylib`).
 - [ ] `ContractAdapter`, `Command`, `ReferenceModel` impls in `src/harness.rs`.
+      Classify every `try_*` call's result with
+      `Outcome::from_try_result(result, required_auth_satisfied, code_of)` —
+      not a hand-written match on the nested `Result` — so a real undeclared
+      panic can't get misclassified as a benign auth rejection (see the
+      README's "Execution model" section for why those are otherwise
+      indistinguishable).
 - [ ] At least one invariant wired (inline, from `soro-fuzz-invariants`, or
       both).
 - [ ] Unit tests in `harness.rs` covering: a successful path, an

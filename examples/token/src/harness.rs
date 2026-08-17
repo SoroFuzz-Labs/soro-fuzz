@@ -115,7 +115,7 @@ impl Command<TokenAdapter> for TokenCommand {
                 let admin = ctx.addresses.get(ADMIN_INDEX).clone();
                 let to_addr = ctx.addresses.get(to.0 as usize).clone();
                 let amount = amount.get();
-                mock_single_auth(
+                let auth_satisfied = mock_single_auth(
                     ctx.env,
                     ctx.contract_id,
                     &admin,
@@ -123,17 +123,12 @@ impl Command<TokenAdapter> for TokenCommand {
                     "mint",
                     soroban_sdk::vec![ctx.env, to_addr.into_val(ctx.env), amount.into_val(ctx.env)],
                 );
-                match client.try_mint(&to_addr, &amount) {
-                    Ok(Ok(_)) => Outcome::Ok,
-                    Err(Ok(e)) => Outcome::DeclaredError(e as u32),
-                    Err(Err(invoke_err)) => Outcome::Rejected(format!("{invoke_err:?}")),
-                    Ok(Err(conv_err)) => panic!("mint: unexpected value conversion error: {conv_err:?}"),
-                }
+                Outcome::from_try_result(client.try_mint(&to_addr, &amount), auth_satisfied, |e| e as u32)
             }
             TokenCommand::Burn { from, amount } => {
                 let from_addr = ctx.addresses.get(from.0 as usize).clone();
                 let amount = amount.get();
-                mock_single_auth(
+                let auth_satisfied = mock_single_auth(
                     ctx.env,
                     ctx.contract_id,
                     &from_addr,
@@ -141,18 +136,13 @@ impl Command<TokenAdapter> for TokenCommand {
                     "burn",
                     soroban_sdk::vec![ctx.env, from_addr.into_val(ctx.env), amount.into_val(ctx.env)],
                 );
-                match client.try_burn(&from_addr, &amount) {
-                    Ok(Ok(_)) => Outcome::Ok,
-                    Err(Ok(e)) => Outcome::DeclaredError(e as u32),
-                    Err(Err(invoke_err)) => Outcome::Rejected(format!("{invoke_err:?}")),
-                    Ok(Err(conv_err)) => panic!("burn: unexpected value conversion error: {conv_err:?}"),
-                }
+                Outcome::from_try_result(client.try_burn(&from_addr, &amount), auth_satisfied, |e| e as u32)
             }
             TokenCommand::Transfer { from, to, amount } => {
                 let from_addr = ctx.addresses.get(from.0 as usize).clone();
                 let to_addr = ctx.addresses.get(to.0 as usize).clone();
                 let amount = amount.get();
-                mock_single_auth(
+                let auth_satisfied = mock_single_auth(
                     ctx.env,
                     ctx.contract_id,
                     &from_addr,
@@ -165,12 +155,11 @@ impl Command<TokenAdapter> for TokenCommand {
                         amount.into_val(ctx.env)
                     ],
                 );
-                match client.try_transfer(&from_addr, &to_addr, &amount) {
-                    Ok(Ok(_)) => Outcome::Ok,
-                    Err(Ok(e)) => Outcome::DeclaredError(e as u32),
-                    Err(Err(invoke_err)) => Outcome::Rejected(format!("{invoke_err:?}")),
-                    Ok(Err(conv_err)) => panic!("transfer: unexpected value conversion error: {conv_err:?}"),
-                }
+                Outcome::from_try_result(
+                    client.try_transfer(&from_addr, &to_addr, &amount),
+                    auth_satisfied,
+                    |e| e as u32,
+                )
             }
         }
     }
@@ -216,7 +205,10 @@ impl RequiresAuthorizer<TokenAdapter> for TokenCommand {
 
 /// Mocks `signer`'s authorization for `contract_id.fn_name(args)` iff
 /// `signer` is one of the addresses this step authorized; otherwise mocks
-/// nothing, so the contract's `require_auth()` legitimately fails.
+/// nothing, so the contract's `require_auth()` legitimately fails. Returns
+/// whether auth was actually satisfied, so the caller can pass it to
+/// `Outcome::from_try_result` and correctly distinguish an expected auth
+/// rejection from an undeclared panic.
 fn mock_single_auth(
     env: &Env,
     contract_id: &Address,
@@ -224,8 +216,9 @@ fn mock_single_auth(
     authorizers: &[Address],
     fn_name: &str,
     args: soroban_sdk::Vec<soroban_sdk::Val>,
-) {
-    if authorizers.contains(signer) {
+) -> bool {
+    let satisfied = authorizers.contains(signer);
+    if satisfied {
         let invoke = MockAuthInvoke {
             contract: contract_id,
             fn_name,
@@ -239,6 +232,7 @@ fn mock_single_auth(
     } else {
         env.mock_auths(&[]);
     }
+    satisfied
 }
 
 #[cfg(test)]

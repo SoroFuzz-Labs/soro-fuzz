@@ -82,7 +82,7 @@ impl Command<EscrowAdapter> for EscrowCommand {
         match self {
             EscrowCommand::Deposit(amount) => {
                 let amount = amount.get();
-                mock_single_auth(
+                let auth_satisfied = mock_single_auth(
                     ctx.env,
                     ctx.contract_id,
                     &depositor,
@@ -90,15 +90,10 @@ impl Command<EscrowAdapter> for EscrowCommand {
                     "deposit",
                     soroban_sdk::vec![ctx.env, amount.into_val(ctx.env)],
                 );
-                match client.try_deposit(&amount) {
-                    Ok(Ok(_)) => Outcome::Ok,
-                    Err(Ok(e)) => Outcome::DeclaredError(e as u32),
-                    Err(Err(invoke_err)) => Outcome::Rejected(format!("{invoke_err:?}")),
-                    Ok(Err(conv_err)) => panic!("deposit: unexpected value conversion error: {conv_err:?}"),
-                }
+                Outcome::from_try_result(client.try_deposit(&amount), auth_satisfied, |e| e as u32)
             }
             EscrowCommand::Release => {
-                mock_single_auth(
+                let auth_satisfied = mock_single_auth(
                     ctx.env,
                     ctx.contract_id,
                     &depositor,
@@ -106,22 +101,13 @@ impl Command<EscrowAdapter> for EscrowCommand {
                     "release",
                     soroban_sdk::vec![ctx.env],
                 );
-                match client.try_release() {
-                    Ok(Ok(_)) => Outcome::Ok,
-                    Err(Ok(e)) => Outcome::DeclaredError(e as u32),
-                    Err(Err(invoke_err)) => Outcome::Rejected(format!("{invoke_err:?}")),
-                    Ok(Err(conv_err)) => panic!("release: unexpected value conversion error: {conv_err:?}"),
-                }
+                Outcome::from_try_result(client.try_release(), auth_satisfied, |e| e as u32)
             }
             EscrowCommand::Refund => {
                 // Permissionless by design (see the contract doc comment):
-                // no auth to mock.
-                match client.try_refund() {
-                    Ok(Ok(_)) => Outcome::Ok,
-                    Err(Ok(e)) => Outcome::DeclaredError(e as u32),
-                    Err(Err(invoke_err)) => Outcome::Rejected(format!("{invoke_err:?}")),
-                    Ok(Err(conv_err)) => panic!("refund: unexpected value conversion error: {conv_err:?}"),
-                }
+                // no auth to mock, and none required, so `Abort` here can
+                // only mean an undeclared bug.
+                Outcome::from_try_result(client.try_refund(), true, |e| e as u32)
             }
             EscrowCommand::AdvanceTime(advance) => {
                 let now = ctx.env.ledger().timestamp();
@@ -176,7 +162,10 @@ impl Invariant<EscrowAdapter> for EscrowStatusMatchesModel {
 
 /// Mocks `signer`'s authorization for `contract_id.fn_name(args)` iff
 /// `signer` is one of the addresses this step authorized; otherwise mocks
-/// nothing, so the contract's `require_auth()` legitimately fails.
+/// nothing, so the contract's `require_auth()` legitimately fails. Returns
+/// whether auth was actually satisfied, so the caller can pass it to
+/// `Outcome::from_try_result` and correctly distinguish an expected auth
+/// rejection from an undeclared panic.
 fn mock_single_auth(
     env: &Env,
     contract_id: &Address,
@@ -184,8 +173,9 @@ fn mock_single_auth(
     authorizers: &[Address],
     fn_name: &str,
     args: soroban_sdk::Vec<soroban_sdk::Val>,
-) {
-    if authorizers.contains(signer) {
+) -> bool {
+    let satisfied = authorizers.contains(signer);
+    if satisfied {
         let invoke = MockAuthInvoke {
             contract: contract_id,
             fn_name,
@@ -199,6 +189,7 @@ fn mock_single_auth(
     } else {
         env.mock_auths(&[]);
     }
+    satisfied
 }
 
 #[cfg(test)]
