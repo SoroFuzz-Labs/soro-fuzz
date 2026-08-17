@@ -123,7 +123,9 @@ impl Command<TokenAdapter> for TokenCommand {
                     "mint",
                     soroban_sdk::vec![ctx.env, to_addr.into_val(ctx.env), amount.into_val(ctx.env)],
                 );
-                Outcome::from_try_result(client.try_mint(&to_addr, &amount), auth_satisfied, |e| e as u32)
+                Outcome::from_try_result(client.try_mint(&to_addr, &amount), auth_satisfied, |e| {
+                    e as u32
+                })
             }
             TokenCommand::Burn { from, amount } => {
                 let from_addr = ctx.addresses.get(from.0 as usize).clone();
@@ -134,9 +136,17 @@ impl Command<TokenAdapter> for TokenCommand {
                     &from_addr,
                     authorizers,
                     "burn",
-                    soroban_sdk::vec![ctx.env, from_addr.into_val(ctx.env), amount.into_val(ctx.env)],
+                    soroban_sdk::vec![
+                        ctx.env,
+                        from_addr.into_val(ctx.env),
+                        amount.into_val(ctx.env)
+                    ],
                 );
-                Outcome::from_try_result(client.try_burn(&from_addr, &amount), auth_satisfied, |e| e as u32)
+                Outcome::from_try_result(
+                    client.try_burn(&from_addr, &amount),
+                    auth_satisfied,
+                    |e| e as u32,
+                )
             }
             TokenCommand::Transfer { from, to, amount } => {
                 let from_addr = ctx.addresses.get(from.0 as usize).clone();

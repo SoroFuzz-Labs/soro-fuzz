@@ -36,7 +36,9 @@ pub struct TokenContract;
 impl TokenContract {
     pub fn __constructor(env: Env, admin: Address, initial_holder: Address, initial_supply: i128) {
         env.storage().instance().set(&DataKey::Admin, &admin);
-        env.storage().instance().set(&DataKey::TotalSupply, &initial_supply);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalSupply, &initial_supply);
         env.storage()
             .persistent()
             .set(&DataKey::Balance(initial_holder), &initial_supply);
@@ -52,11 +54,19 @@ impl TokenContract {
         let new_balance = Self::balance(env.clone(), to.clone())
             .checked_add(amount)
             .ok_or(Error::Overflow)?;
-        let supply: i128 = env.storage().instance().get(&DataKey::TotalSupply).unwrap_or(0);
+        let supply: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalSupply)
+            .unwrap_or(0);
         let new_supply = supply.checked_add(amount).ok_or(Error::Overflow)?;
 
-        env.storage().persistent().set(&DataKey::Balance(to), &new_balance);
-        env.storage().instance().set(&DataKey::TotalSupply, &new_supply);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Balance(to), &new_balance);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalSupply, &new_supply);
         Ok(new_balance)
     }
 
@@ -75,11 +85,19 @@ impl TokenContract {
             return Err(Error::InsufficientBalance);
         }
         let new_balance = balance - amount;
-        let supply: i128 = env.storage().instance().get(&DataKey::TotalSupply).unwrap_or(0);
+        let supply: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalSupply)
+            .unwrap_or(0);
         let new_supply = supply.checked_sub(amount).ok_or(Error::Overflow)?;
 
-        env.storage().persistent().set(&DataKey::Balance(from), &new_balance);
-        env.storage().instance().set(&DataKey::TotalSupply, &new_supply);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Balance(from), &new_balance);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalSupply, &new_supply);
         Ok(new_balance)
     }
 
@@ -100,8 +118,12 @@ impl TokenContract {
             .checked_add(amount)
             .ok_or(Error::Overflow)?;
 
-        env.storage().persistent().set(&DataKey::Balance(from), &new_from_balance);
-        env.storage().persistent().set(&DataKey::Balance(to), &new_to_balance);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Balance(from), &new_from_balance);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Balance(to), &new_to_balance);
         Ok(())
     }
 
@@ -113,6 +135,9 @@ impl TokenContract {
     }
 
     pub fn total_supply(env: Env) -> i128 {
-        env.storage().instance().get(&DataKey::TotalSupply).unwrap_or(0)
+        env.storage()
+            .instance()
+            .get(&DataKey::TotalSupply)
+            .unwrap_or(0)
     }
 }

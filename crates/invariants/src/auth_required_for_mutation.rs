@@ -86,7 +86,11 @@ mod tests {
     }
 
     impl RequiresAuthorizer<Adapter> for RequireCmd {
-        fn required_authorizer(&self, _model: &FakeModel, _addresses: &AddressPool) -> Option<Address> {
+        fn required_authorizer(
+            &self,
+            _model: &FakeModel,
+            _addresses: &AddressPool,
+        ) -> Option<Address> {
             self.0.clone()
         }
     }

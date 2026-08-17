@@ -109,7 +109,14 @@ mod tests {
             balances: std::vec![(a, 100)],
             total_supply: 50,
         };
-        let ctx = ctx_for(&env, &contract_id, &model, &FakeCommand, &Outcome::Ok, &pool);
+        let ctx = ctx_for(
+            &env,
+            &contract_id,
+            &model,
+            &FakeCommand,
+            &Outcome::Ok,
+            &pool,
+        );
         assert!(SupplyConservation.check(&ctx).is_err());
     }
 
@@ -124,7 +131,14 @@ mod tests {
             balances: std::vec![(a, 40), (b, 60)],
             total_supply: 100,
         };
-        let ctx = ctx_for(&env, &contract_id, &model, &FakeCommand, &Outcome::Ok, &pool);
+        let ctx = ctx_for(
+            &env,
+            &contract_id,
+            &model,
+            &FakeCommand,
+            &Outcome::Ok,
+            &pool,
+        );
         assert!(SupplyConservation.check(&ctx).is_ok());
     }
 }

@@ -100,10 +100,11 @@ impl<A: ContractAdapter> Harness<A> {
             );
 
             let command = step.command;
-            let outcome = match catch_unwind(AssertUnwindSafe(|| command.execute(&ctx, &authorizers))) {
-                Ok(outcome) => outcome,
-                Err(payload) => Outcome::UndeclaredPanic(panic_message(payload)),
-            };
+            let outcome =
+                match catch_unwind(AssertUnwindSafe(|| command.execute(&ctx, &authorizers))) {
+                    Ok(outcome) => outcome,
+                    Err(payload) => Outcome::UndeclaredPanic(panic_message(payload)),
+                };
 
             if let Outcome::UndeclaredPanic(message) = &outcome {
                 return Err(Violation {

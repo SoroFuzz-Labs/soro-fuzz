@@ -68,11 +68,21 @@ impl Command<CounterAdapter> for CounterCommand {
             // No auth involved, so `required_auth_satisfied` is
             // unconditionally true: an Abort here can't be attributed to
             // withheld auth, so it can only be an undeclared bug.
-            CounterCommand::Increment => Outcome::from_try_result(client.try_increment(), true, |e| e as u32),
-            CounterCommand::Decrement => Outcome::from_try_result(client.try_decrement(), true, |e| e as u32),
+            CounterCommand::Increment => {
+                Outcome::from_try_result(client.try_increment(), true, |e| e as u32)
+            }
+            CounterCommand::Decrement => {
+                Outcome::from_try_result(client.try_decrement(), true, |e| e as u32)
+            }
             CounterCommand::Reset => {
-                let auth_satisfied =
-                    mock_admin_auth(ctx.env, ctx.contract_id, &admin, authorizers, "reset", soroban_sdk::vec![ctx.env]);
+                let auth_satisfied = mock_admin_auth(
+                    ctx.env,
+                    ctx.contract_id,
+                    &admin,
+                    authorizers,
+                    "reset",
+                    soroban_sdk::vec![ctx.env],
+                );
                 Outcome::from_try_result(client.try_reset(), auth_satisfied, |e| e as u32)
             }
             CounterCommand::Set(value) => {
@@ -90,13 +100,22 @@ impl Command<CounterAdapter> for CounterCommand {
         }
     }
 
-    fn apply_to_model(&self, model: &mut CounterModel, _addresses: &AddressPool, outcome: &Outcome) {
+    fn apply_to_model(
+        &self,
+        model: &mut CounterModel,
+        _addresses: &AddressPool,
+        outcome: &Outcome,
+    ) {
         if !outcome.is_ok() {
             return;
         }
         match self {
-            CounterCommand::Increment => model.expected_count = model.expected_count.saturating_add(1),
-            CounterCommand::Decrement => model.expected_count = model.expected_count.saturating_sub(1),
+            CounterCommand::Increment => {
+                model.expected_count = model.expected_count.saturating_add(1)
+            }
+            CounterCommand::Decrement => {
+                model.expected_count = model.expected_count.saturating_sub(1)
+            }
             CounterCommand::Reset => model.expected_count = 0,
             CounterCommand::Set(value) => model.expected_count = value.get() as i64,
         }
@@ -256,12 +275,14 @@ mod broken_counter {
     //! fuzzer catches a state-divergence bug end to end — not just that `.check()`
     //! returns `Err` when handed a wrong model in isolation.
 
-    use super::{CounterCommand, CounterModel, mock_admin_auth};
+    use super::{mock_admin_auth, CounterCommand, CounterModel};
     use soro_fuzz_core::{
         AddressPool, AuthSelection, Command, ContractAdapter, ExecContext, Harness, Invariant,
         InvariantCtx, Outcome, Run, Step, Violation,
     };
-    use soroban_sdk::{contract, contracterror, contractimpl, symbol_short, Address, Env, IntoVal, Symbol};
+    use soroban_sdk::{
+        contract, contracterror, contractimpl, symbol_short, Address, Env, IntoVal, Symbol,
+    };
 
     const COUNT: Symbol = symbol_short!("COUNT");
     const ADMIN: Symbol = symbol_short!("ADMIN");
@@ -325,8 +346,10 @@ mod broken_counter {
 
         fn setup(env: &Env, addresses: &AddressPool) -> (Address, Self::Model) {
             let admin = addresses.get(0).clone();
-            let contract_id =
-                env.register(BrokenCounterContract, BrokenCounterContractArgs::__constructor(&admin));
+            let contract_id = env.register(
+                BrokenCounterContract,
+                BrokenCounterContractArgs::__constructor(&admin),
+            );
             (contract_id, CounterModel::default())
         }
     }
@@ -336,29 +359,56 @@ mod broken_counter {
             let admin = ctx.addresses.get(0).clone();
             let client = BrokenCounterContractClient::new(ctx.env, ctx.contract_id);
             match self {
-                CounterCommand::Increment => Outcome::from_try_result(client.try_increment(), true, |e| e as u32),
-                CounterCommand::Decrement => Outcome::from_try_result(client.try_decrement(), true, |e| e as u32),
+                CounterCommand::Increment => {
+                    Outcome::from_try_result(client.try_increment(), true, |e| e as u32)
+                }
+                CounterCommand::Decrement => {
+                    Outcome::from_try_result(client.try_decrement(), true, |e| e as u32)
+                }
                 CounterCommand::Reset => {
-                    let ok = mock_admin_auth(ctx.env, ctx.contract_id, &admin, authorizers, "reset", soroban_sdk::vec![ctx.env]);
+                    let ok = mock_admin_auth(
+                        ctx.env,
+                        ctx.contract_id,
+                        &admin,
+                        authorizers,
+                        "reset",
+                        soroban_sdk::vec![ctx.env],
+                    );
                     Outcome::from_try_result(client.try_reset(), ok, |e| e as u32)
                 }
                 CounterCommand::Set(value) => {
                     let value = value.get() as i64;
-                    let ok = mock_admin_auth(ctx.env, ctx.contract_id, &admin, authorizers, "set", soroban_sdk::vec![ctx.env, value.into_val(ctx.env)]);
+                    let ok = mock_admin_auth(
+                        ctx.env,
+                        ctx.contract_id,
+                        &admin,
+                        authorizers,
+                        "set",
+                        soroban_sdk::vec![ctx.env, value.into_val(ctx.env)],
+                    );
                     Outcome::from_try_result(client.try_set(&value), ok, |e| e as u32)
                 }
             }
         }
 
-        fn apply_to_model(&self, model: &mut CounterModel, _addresses: &AddressPool, outcome: &Outcome) {
+        fn apply_to_model(
+            &self,
+            model: &mut CounterModel,
+            _addresses: &AddressPool,
+            outcome: &Outcome,
+        ) {
             if !outcome.is_ok() {
                 return;
             }
             // The model predicts CORRECT (+1) behaviour — that's what makes it
             // disagree with the broken contract's +2.
             match self {
-                CounterCommand::Increment => model.expected_count = model.expected_count.saturating_add(1),
-                CounterCommand::Decrement => model.expected_count = model.expected_count.saturating_sub(1),
+                CounterCommand::Increment => {
+                    model.expected_count = model.expected_count.saturating_add(1)
+                }
+                CounterCommand::Decrement => {
+                    model.expected_count = model.expected_count.saturating_sub(1)
+                }
                 CounterCommand::Reset => model.expected_count = 0,
                 CounterCommand::Set(value) => model.expected_count = value.get() as i64,
             }
@@ -379,7 +429,10 @@ mod broken_counter {
             if actual != ctx.model.expected_count {
                 return Err(Violation {
                     invariant: self.name(),
-                    message: format!("on-chain count {actual} != model's expected count {}", ctx.model.expected_count),
+                    message: format!(
+                        "on-chain count {actual} != model's expected count {}",
+                        ctx.model.expected_count
+                    ),
                     step_index: ctx.step_index,
                 });
             }
@@ -402,8 +455,12 @@ mod broken_counter {
     #[test]
     fn broken_increment_is_a_finding() {
         // One increment: the broken contract lands on 2, the model expects 1.
-        let run = Run { steps: vec![step(CounterCommand::Increment, vec![])] };
-        let violation = harness().run(run).expect_err("a broken counter must be caught by the harness");
+        let run = Run {
+            steps: vec![step(CounterCommand::Increment, vec![])],
+        };
+        let violation = harness()
+            .run(run)
+            .expect_err("a broken counter must be caught by the harness");
         assert_eq!(violation.invariant, "counter-value-matches-model");
         assert_eq!(violation.step_index, 0);
     }

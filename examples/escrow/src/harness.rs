@@ -61,7 +61,10 @@ impl ContractAdapter for EscrowAdapter {
     fn setup(env: &Env, addresses: &AddressPool) -> (Address, Self::Model) {
         let depositor = addresses.get(DEPOSITOR_INDEX).clone();
         let beneficiary = addresses.get(BENEFICIARY_INDEX).clone();
-        let deadline = env.ledger().timestamp().saturating_add(DEADLINE_OFFSET_SECS);
+        let deadline = env
+            .ledger()
+            .timestamp()
+            .saturating_add(DEADLINE_OFFSET_SECS);
         let contract_id = env.register(
             EscrowContract,
             EscrowContractArgs::__constructor(&depositor, &beneficiary, &deadline),
@@ -111,7 +114,9 @@ impl Command<EscrowAdapter> for EscrowCommand {
             }
             EscrowCommand::AdvanceTime(advance) => {
                 let now = ctx.env.ledger().timestamp();
-                ctx.env.ledger().set_timestamp(now.saturating_add(advance.0 as u64));
+                ctx.env
+                    .ledger()
+                    .set_timestamp(now.saturating_add(advance.0 as u64));
                 Outcome::Ok
             }
         }
@@ -245,7 +250,10 @@ mod tests {
                     EscrowCommand::Deposit(NonNegativeI128::new(100)),
                     vec![DEPOSITOR_INDEX as u8],
                 ),
-                step(EscrowCommand::AdvanceTime(TimeAdvance(DEADLINE_OFFSET_SECS as u32 + 1)), vec![]),
+                step(
+                    EscrowCommand::AdvanceTime(TimeAdvance(DEADLINE_OFFSET_SECS as u32 + 1)),
+                    vec![],
+                ),
                 step(EscrowCommand::Refund, vec![]),
             ],
         };
@@ -260,7 +268,10 @@ mod tests {
                     EscrowCommand::Deposit(NonNegativeI128::new(100)),
                     vec![DEPOSITOR_INDEX as u8],
                 ),
-                step(EscrowCommand::AdvanceTime(TimeAdvance(DEADLINE_OFFSET_SECS as u32 + 1)), vec![]),
+                step(
+                    EscrowCommand::AdvanceTime(TimeAdvance(DEADLINE_OFFSET_SECS as u32 + 1)),
+                    vec![],
+                ),
                 step(EscrowCommand::Release, vec![DEPOSITOR_INDEX as u8]),
             ],
         };
