@@ -98,7 +98,14 @@ mod tests {
         let model = FakeModel {
             balances: std::vec![(addr, -1)],
         };
-        let ctx = ctx_for(&env, &contract_id, &model, &FakeCommand, &Outcome::Ok, &pool);
+        let ctx = ctx_for(
+            &env,
+            &contract_id,
+            &model,
+            &FakeCommand,
+            &Outcome::Ok,
+            &pool,
+        );
         assert!(NoNegativeBalance.check(&ctx).is_err());
     }
 
@@ -112,7 +119,14 @@ mod tests {
         let model = FakeModel {
             balances: std::vec![(a, 0), (b, 100)],
         };
-        let ctx = ctx_for(&env, &contract_id, &model, &FakeCommand, &Outcome::Ok, &pool);
+        let ctx = ctx_for(
+            &env,
+            &contract_id,
+            &model,
+            &FakeCommand,
+            &Outcome::Ok,
+            &pool,
+        );
         assert!(NoNegativeBalance.check(&ctx).is_ok());
     }
 }

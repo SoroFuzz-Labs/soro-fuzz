@@ -72,7 +72,9 @@ pub struct AuthSelection {
 
 impl AuthSelection {
     pub fn none() -> Self {
-        Self { indices: Vec::new() }
+        Self {
+            indices: Vec::new(),
+        }
     }
 
     /// Builds a selection from explicit raw pool indices. Mainly useful for

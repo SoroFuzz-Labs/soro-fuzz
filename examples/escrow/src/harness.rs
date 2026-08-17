@@ -61,7 +61,10 @@ impl ContractAdapter for EscrowAdapter {
     fn setup(env: &Env, addresses: &AddressPool) -> (Address, Self::Model) {
         let depositor = addresses.get(DEPOSITOR_INDEX).clone();
         let beneficiary = addresses.get(BENEFICIARY_INDEX).clone();
-        let deadline = env.ledger().timestamp().saturating_add(DEADLINE_OFFSET_SECS);
+        let deadline = env
+            .ledger()
+            .timestamp()
+            .saturating_add(DEADLINE_OFFSET_SECS);
         let contract_id = env.register(
             EscrowContract,
             EscrowContractArgs::__constructor(&depositor, &beneficiary, &deadline),
@@ -94,7 +97,9 @@ impl Command<EscrowAdapter> for EscrowCommand {
                     Ok(Ok(_)) => Outcome::Ok,
                     Err(Ok(e)) => Outcome::DeclaredError(e as u32),
                     Err(Err(invoke_err)) => Outcome::Rejected(format!("{invoke_err:?}")),
-                    Ok(Err(conv_err)) => panic!("deposit: unexpected value conversion error: {conv_err:?}"),
+                    Ok(Err(conv_err)) => {
+                        panic!("deposit: unexpected value conversion error: {conv_err:?}")
+                    }
                 }
             }
             EscrowCommand::Release => {
@@ -110,7 +115,9 @@ impl Command<EscrowAdapter> for EscrowCommand {
                     Ok(Ok(_)) => Outcome::Ok,
                     Err(Ok(e)) => Outcome::DeclaredError(e as u32),
                     Err(Err(invoke_err)) => Outcome::Rejected(format!("{invoke_err:?}")),
-                    Ok(Err(conv_err)) => panic!("release: unexpected value conversion error: {conv_err:?}"),
+                    Ok(Err(conv_err)) => {
+                        panic!("release: unexpected value conversion error: {conv_err:?}")
+                    }
                 }
             }
             EscrowCommand::Refund => {
@@ -120,12 +127,16 @@ impl Command<EscrowAdapter> for EscrowCommand {
                     Ok(Ok(_)) => Outcome::Ok,
                     Err(Ok(e)) => Outcome::DeclaredError(e as u32),
                     Err(Err(invoke_err)) => Outcome::Rejected(format!("{invoke_err:?}")),
-                    Ok(Err(conv_err)) => panic!("refund: unexpected value conversion error: {conv_err:?}"),
+                    Ok(Err(conv_err)) => {
+                        panic!("refund: unexpected value conversion error: {conv_err:?}")
+                    }
                 }
             }
             EscrowCommand::AdvanceTime(advance) => {
                 let now = ctx.env.ledger().timestamp();
-                ctx.env.ledger().set_timestamp(now.saturating_add(advance.0 as u64));
+                ctx.env
+                    .ledger()
+                    .set_timestamp(now.saturating_add(advance.0 as u64));
                 Outcome::Ok
             }
         }
@@ -254,7 +265,10 @@ mod tests {
                     EscrowCommand::Deposit(NonNegativeI128::new(100)),
                     vec![DEPOSITOR_INDEX as u8],
                 ),
-                step(EscrowCommand::AdvanceTime(TimeAdvance(DEADLINE_OFFSET_SECS as u32 + 1)), vec![]),
+                step(
+                    EscrowCommand::AdvanceTime(TimeAdvance(DEADLINE_OFFSET_SECS as u32 + 1)),
+                    vec![],
+                ),
                 step(EscrowCommand::Refund, vec![]),
             ],
         };
@@ -269,7 +283,10 @@ mod tests {
                     EscrowCommand::Deposit(NonNegativeI128::new(100)),
                     vec![DEPOSITOR_INDEX as u8],
                 ),
-                step(EscrowCommand::AdvanceTime(TimeAdvance(DEADLINE_OFFSET_SECS as u32 + 1)), vec![]),
+                step(
+                    EscrowCommand::AdvanceTime(TimeAdvance(DEADLINE_OFFSET_SECS as u32 + 1)),
+                    vec![],
+                ),
                 step(EscrowCommand::Release, vec![DEPOSITOR_INDEX as u8]),
             ],
         };

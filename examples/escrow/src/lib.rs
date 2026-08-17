@@ -10,7 +10,9 @@
 //! one of two terminal transitions, gated by ledger time rather than
 //! balances) has nothing in common with the counter or token examples.
 
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, Symbol};
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, Symbol,
+};
 
 #[cfg(any(test, feature = "testutils"))]
 pub mod harness;

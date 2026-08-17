@@ -77,7 +77,10 @@ impl ContractAdapter for BrokenCounterAdapter {
     type Model = BrokenCounterModel;
 
     fn setup(env: &Env, _addresses: &AddressPool) -> (Address, Self::Model) {
-        (env.register(BrokenCounterContract, ()), BrokenCounterModel::default())
+        (
+            env.register(BrokenCounterContract, ()),
+            BrokenCounterModel::default(),
+        )
     }
 }
 
