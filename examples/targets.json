@@ -1,0 +1,91 @@
+{
+  "targets": [
+    {
+      "id": "counter",
+      "name": "counter",
+      "contract_name": "Counter",
+      "fuzz_target_name": "counter_fuzz",
+      "methods": [
+        { "name": "increment", "params": [] },
+        { "name": "decrement", "params": [] },
+        { "name": "reset", "params": [] },
+        { "name": "set", "params": [{ "name": "value", "type": "i64" }] }
+      ],
+      "available_invariants": [
+        {
+          "id": "counter-value-matches-model",
+          "name": "Counter value matches model",
+          "description": "The on-chain count must always equal the shadow model's expected value."
+        }
+      ]
+    },
+    {
+      "id": "token",
+      "name": "token",
+      "contract_name": "Token",
+      "fuzz_target_name": "token_fuzz",
+      "methods": [
+        {
+          "name": "mint",
+          "params": [
+            { "name": "to", "type": "Address" },
+            { "name": "amount", "type": "i128" }
+          ]
+        },
+        {
+          "name": "burn",
+          "params": [
+            { "name": "from", "type": "Address" },
+            { "name": "amount", "type": "i128" }
+          ]
+        },
+        {
+          "name": "transfer",
+          "params": [
+            { "name": "from", "type": "Address" },
+            { "name": "to", "type": "Address" },
+            { "name": "amount", "type": "i128" }
+          ]
+        }
+      ],
+      "available_invariants": [
+        {
+          "id": "no-negative-balance",
+          "name": "No negative balance",
+          "description": "No tracked balance may ever go negative."
+        },
+        {
+          "id": "supply-conservation",
+          "name": "Supply conservation",
+          "description": "The sum of every tracked balance must always equal the tracked total supply."
+        },
+        {
+          "id": "auth-required-for-mutation",
+          "name": "Auth required for mutation",
+          "description": "A mutation that declares a required authorizer must not succeed unless that authorizer was in the step's authorized set."
+        }
+      ]
+    },
+    {
+      "id": "escrow",
+      "name": "escrow",
+      "contract_name": "Escrow",
+      "fuzz_target_name": "escrow_fuzz",
+      "methods": [
+        {
+          "name": "deposit",
+          "params": [{ "name": "amount", "type": "i128" }]
+        },
+        { "name": "release", "params": [] },
+        { "name": "refund", "params": [] }
+      ],
+      "available_invariants": [
+        {
+          "id": "escrow-status-matches-model",
+          "name": "Escrow status matches model",
+          "description": "The on-chain escrow status must always match the shadow model's expected state."
+        }
+      ]
+    }
+  ]
+}
