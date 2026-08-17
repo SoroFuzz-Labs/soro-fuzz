@@ -30,7 +30,9 @@ pub use supply_conservation::{HasTotalSupply, SupplyConservation};
 /// throwaway model, without needing an actual running contract.
 #[cfg(test)]
 pub(crate) mod test_support {
-    use soro_fuzz_core::{AddressPool, Command, ContractAdapter, ExecContext, Outcome, ReferenceModel};
+    use soro_fuzz_core::{
+        AddressPool, Command, ContractAdapter, ExecContext, Outcome, ReferenceModel,
+    };
     use soroban_sdk::Address;
     use std::marker::PhantomData;
 
@@ -52,7 +54,9 @@ pub(crate) mod test_support {
             _env: &soroban_sdk::Env,
             _addresses: &soro_fuzz_core::AddressPool,
         ) -> (Address, Self::Model) {
-            unimplemented!("test_support::FakeAdapter is only used to build InvariantCtx values directly")
+            unimplemented!(
+                "test_support::FakeAdapter is only used to build InvariantCtx values directly"
+            )
         }
     }
 

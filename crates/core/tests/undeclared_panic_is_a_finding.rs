@@ -50,7 +50,13 @@ impl Command<BuggyAdapter> for Boom {
         Outcome::from_try_result(client.try_boom(), true, |e| e as u32)
     }
 
-    fn apply_to_model(&self, _model: &mut BuggyModel, _addresses: &AddressPool, _outcome: &Outcome) {}
+    fn apply_to_model(
+        &self,
+        _model: &mut BuggyModel,
+        _addresses: &AddressPool,
+        _outcome: &Outcome,
+    ) {
+    }
 }
 
 impl ContractAdapter for BuggyAdapter {

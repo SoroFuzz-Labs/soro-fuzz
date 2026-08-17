@@ -6,7 +6,9 @@ use proptest::prelude::*;
 use proptest_arbitrary_interop::arb;
 
 use soro_fuzz_core::{Harness, Run};
-use soro_fuzz_example_counter::harness::{CounterAdapter, CounterCommand, CounterValueMatchesModel};
+use soro_fuzz_example_counter::harness::{
+    CounterAdapter, CounterCommand, CounterValueMatchesModel,
+};
 
 fn harness() -> Harness<CounterAdapter> {
     Harness::<CounterAdapter>::new().with_invariant(CounterValueMatchesModel)

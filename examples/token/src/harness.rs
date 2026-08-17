@@ -127,7 +127,9 @@ impl Command<TokenAdapter> for TokenCommand {
                     Ok(Ok(_)) => Outcome::Ok,
                     Err(Ok(e)) => Outcome::DeclaredError(e as u32),
                     Err(Err(invoke_err)) => Outcome::Rejected(format!("{invoke_err:?}")),
-                    Ok(Err(conv_err)) => panic!("mint: unexpected value conversion error: {conv_err:?}"),
+                    Ok(Err(conv_err)) => {
+                        panic!("mint: unexpected value conversion error: {conv_err:?}")
+                    }
                 }
             }
             TokenCommand::Burn { from, amount } => {
@@ -139,13 +141,19 @@ impl Command<TokenAdapter> for TokenCommand {
                     &from_addr,
                     authorizers,
                     "burn",
-                    soroban_sdk::vec![ctx.env, from_addr.into_val(ctx.env), amount.into_val(ctx.env)],
+                    soroban_sdk::vec![
+                        ctx.env,
+                        from_addr.into_val(ctx.env),
+                        amount.into_val(ctx.env)
+                    ],
                 );
                 match client.try_burn(&from_addr, &amount) {
                     Ok(Ok(_)) => Outcome::Ok,
                     Err(Ok(e)) => Outcome::DeclaredError(e as u32),
                     Err(Err(invoke_err)) => Outcome::Rejected(format!("{invoke_err:?}")),
-                    Ok(Err(conv_err)) => panic!("burn: unexpected value conversion error: {conv_err:?}"),
+                    Ok(Err(conv_err)) => {
+                        panic!("burn: unexpected value conversion error: {conv_err:?}")
+                    }
                 }
             }
             TokenCommand::Transfer { from, to, amount } => {
@@ -169,7 +177,9 @@ impl Command<TokenAdapter> for TokenCommand {
                     Ok(Ok(_)) => Outcome::Ok,
                     Err(Ok(e)) => Outcome::DeclaredError(e as u32),
                     Err(Err(invoke_err)) => Outcome::Rejected(format!("{invoke_err:?}")),
-                    Ok(Err(conv_err)) => panic!("transfer: unexpected value conversion error: {conv_err:?}"),
+                    Ok(Err(conv_err)) => {
+                        panic!("transfer: unexpected value conversion error: {conv_err:?}")
+                    }
                 }
             }
         }
