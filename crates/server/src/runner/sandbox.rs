@@ -100,6 +100,53 @@ impl Sandbox for DockerExecSandbox {
     }
 }
 
+/// After a timeout kill, how long we still wait for the output pipes to reach
+/// EOF before abandoning them. Long enough to capture a normally-terminating
+/// child's final bytes, short enough that a process which inherited the pipe
+/// and outlived its parent cannot stall the caller.
+const DRAIN_GRACE: Duration = Duration::from_secs(2);
+
+/// SIGKILLs the entire process group led by `child`.
+///
+/// The child is spawned into its own process group (`process_group(0)` below),
+/// so its pid doubles as the group id and signalling the *negative* pid
+/// reaches the child and every process it spawned. That is what lets a timeout
+/// reap a shell's grandchildren — e.g. the `sleep`/`ping` behind a
+/// `sh -c`/`cmd /C` shim — instead of orphaning one that still holds our
+/// stdout/stderr pipe open.
+#[cfg(unix)]
+async fn terminate_group(child: &tokio::process::Child) {
+    if let Some(pid) = child.id() {
+        // SAFETY: `kill(2)` with a group target touches no memory we own; a
+        // pid whose group has already exited yields `ESRCH`, which we drop.
+        unsafe {
+            libc::kill(-(pid as i32), libc::SIGKILL);
+        }
+    }
+}
+
+/// Windows has no process group we can signal the way Unix does, so we ask
+/// `taskkill` to walk and kill the child's whole tree by pid (`/T`). We wait
+/// for it to finish *before* the caller reaps the direct child: killing the
+/// child first would orphan its grandchildren and break the parent links `/T`
+/// follows, leaving a grandchild holding our pipe open (and, on Windows, a
+/// blocking pipe read the runtime then joins at shutdown).
+#[cfg(windows)]
+async fn terminate_group(child: &tokio::process::Child) {
+    if let Some(pid) = child.id() {
+        let _ = tokio::process::Command::new("taskkill")
+            .args(["/T", "/F", "/PID", &pid.to_string()])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await;
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+async fn terminate_group(_child: &tokio::process::Child) {}
+
 async fn run_with_timeout(
     mut command: Command,
     timeout: Duration,
@@ -108,6 +155,16 @@ async fn run_with_timeout(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+
+    // Put the child in its own process group so a timeout can SIGKILL the whole
+    // group (the child *and* anything it spawned), not just the process we hold
+    // a handle to. Otherwise a grandchild that inherited the output pipe keeps
+    // its write end open after we kill the parent, and the drain below blocks
+    // until that grandchild exits on its own — the exact hang this timeout
+    // exists to break. (Windows can't set this at spawn; `terminate_group`
+    // kills the tree by pid via taskkill instead.)
+    #[cfg(unix)]
+    command.process_group(0);
 
     let mut child = command.spawn()?;
 
@@ -126,19 +183,51 @@ async fn run_with_timeout(
         let _ = stderr_pipe.read_to_string(&mut buf).await;
         buf
     });
+    // Kept so a timed-out drain that a survivor is still holding open can be
+    // cancelled rather than left to block; unused on the normal-exit path.
+    let stdout_abort = stdout_task.abort_handle();
+    let stderr_abort = stderr_task.abort_handle();
 
     let (timed_out, exit_code) = match tokio::time::timeout(timeout, child.wait()).await {
         Ok(Ok(status)) => (false, status.code()),
         Ok(Err(_)) => (false, None),
         Err(_) => {
+            // Deadline hit. Kill the whole tree (see `terminate_group`) so any
+            // grandchildren the target spawned die too — awaited before we reap
+            // the direct child, so the tree is still walkable — then reap it.
+            terminate_group(&child).await;
             let _ = child.kill().await;
-            let _ = child.wait().await;
             (true, None)
         }
     };
 
-    let stdout = stdout_task.await.unwrap_or_default();
-    let stderr = stderr_task.await.unwrap_or_default();
+    // Collect whatever the pipes captured. On the normal-exit path they reach
+    // EOF the moment the child (and, on Unix, its group) exits, so this returns
+    // at once and we wait however long the last bytes take. After a timeout we
+    // bound the wait: output already captured is kept, but a pipe still held
+    // open by a survivor past `DRAIN_GRACE` is abandoned rather than allowed to
+    // block the caller indefinitely.
+    let (stdout, stderr) = if timed_out {
+        let drain = async {
+            (
+                stdout_task.await.unwrap_or_default(),
+                stderr_task.await.unwrap_or_default(),
+            )
+        };
+        match tokio::time::timeout(DRAIN_GRACE, drain).await {
+            Ok(pair) => pair,
+            Err(_) => {
+                stdout_abort.abort();
+                stderr_abort.abort();
+                (String::new(), String::new())
+            }
+        }
+    } else {
+        (
+            stdout_task.await.unwrap_or_default(),
+            stderr_task.await.unwrap_or_default(),
+        )
+    };
 
     Ok(SandboxOutput {
         stdout,

@@ -47,5 +47,11 @@ tokio-util = "0.7"
 async-stream = "0.3"
 futures = "0.3"
 
+# Unix-only: lets a timed-out subprocess be SIGKILLed by process group (child
+# plus anything it spawned) — see runner/sandbox.rs. Already in the dependency
+# tree via tokio; this only makes it directly usable.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
