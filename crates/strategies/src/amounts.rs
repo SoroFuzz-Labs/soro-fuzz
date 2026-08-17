@@ -74,9 +74,16 @@ mod tests {
 
     #[test]
     fn full_range_edge_cases_dont_overflow() {
-        let raw = [255u8; 64];
-        let mut u = Unstructured::new(&raw);
-        let v = BoundedI128::<{ i128::MIN }, { i128::MAX }>::arbitrary(&mut u).unwrap();
-        assert!(v.get() >= i128::MIN && v.get() <= i128::MAX);
+        // At the full i128 range, the edge-bias branch's MIN.saturating_add(1)
+        // / MAX.saturating_sub(1) are what keep the extremes from overflowing.
+        // Draw repeatedly over varied input and confirm every draw is produced
+        // without panicking — that is the property under test, not a
+        // tautological "within [i128::MIN, i128::MAX]" comparison.
+        for seed in 0u8..64 {
+            let raw = [seed; 64];
+            let mut u = Unstructured::new(&raw);
+            let v = BoundedI128::<{ i128::MIN }, { i128::MAX }>::arbitrary(&mut u);
+            assert!(v.is_ok(), "arbitrary must not fail at the full i128 range");
+        }
     }
 }
