@@ -1,0 +1,95 @@
+{
+  "targets": [
+    {
+      "id": "counter",
+      "name": "Counter",
+      "contract_name": "CounterContract",
+      "fuzz_target_name": "counter_fuzz",
+      "methods": [
+        { "name": "increment", "params": [] },
+        { "name": "decrement", "params": [] },
+        { "name": "reset", "params": [] },
+        { "name": "set", "params": [{ "name": "value", "type": "i64" }] },
+        { "name": "get", "params": [] }
+      ],
+      "available_invariants": [
+        {
+          "id": "counter-value-matches-model",
+          "name": "Counter value matches model",
+          "description": "The on-chain count must always match the shadow model's expectation."
+        }
+      ],
+      "known_buggy": false
+    },
+    {
+      "id": "token",
+      "name": "Token",
+      "contract_name": "TokenContract",
+      "fuzz_target_name": "token_fuzz",
+      "methods": [
+        {
+          "name": "mint",
+          "params": [
+            { "name": "to", "type": "Address" },
+            { "name": "amount", "type": "i128" }
+          ]
+        },
+        {
+          "name": "burn",
+          "params": [
+            { "name": "from", "type": "Address" },
+            { "name": "amount", "type": "i128" }
+          ]
+        },
+        {
+          "name": "transfer",
+          "params": [
+            { "name": "from", "type": "Address" },
+            { "name": "to", "type": "Address" },
+            { "name": "amount", "type": "i128" }
+          ]
+        },
+        { "name": "balance", "params": [{ "name": "id", "type": "Address" }] },
+        { "name": "total_supply", "params": [] }
+      ],
+      "available_invariants": [
+        {
+          "id": "no-negative-balance",
+          "name": "No negative balance",
+          "description": "No tracked balance may ever go negative."
+        },
+        {
+          "id": "supply-conservation",
+          "name": "Supply conservation",
+          "description": "The sum of every tracked balance must always equal the tracked total supply."
+        },
+        {
+          "id": "auth-required-for-mutation",
+          "name": "Auth required for mutation",
+          "description": "A command declaring a required authorizer must not succeed unless that authorizer was in the step's authorized set."
+        }
+      ],
+      "known_buggy": false
+    },
+    {
+      "id": "escrow",
+      "name": "Escrow",
+      "contract_name": "EscrowContract",
+      "fuzz_target_name": "escrow_fuzz",
+      "methods": [
+        { "name": "deposit", "params": [{ "name": "amount", "type": "i128" }] },
+        { "name": "release", "params": [] },
+        { "name": "refund", "params": [] },
+        { "name": "status", "params": [] }
+      ],
+      "available_invariants": [
+        {
+          "id": "escrow-status-matches-model",
+          "name": "Escrow status matches model",
+          "description": "The on-chain status must always match what the shadow model expects."
+        }
+      ],
+      "known_buggy": false
+    }
+  ]
+}
