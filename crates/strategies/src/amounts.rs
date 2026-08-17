@@ -74,9 +74,13 @@ mod tests {
 
     #[test]
     fn full_range_edge_cases_dont_overflow() {
+        // The full `[i128::MIN, i128::MAX]` range is the overflow-prone case:
+        // `int_in_range` computing the range width, and the `MIN + 1` / `MAX - 1`
+        // edge picks, must not panic. Generating without panicking (the
+        // `.unwrap()` below) is the property under test — any value is trivially
+        // in range for an `i128`, so there is nothing further to assert.
         let raw = [255u8; 64];
         let mut u = Unstructured::new(&raw);
-        let v = BoundedI128::<{ i128::MIN }, { i128::MAX }>::arbitrary(&mut u).unwrap();
-        assert!(v.get() >= i128::MIN && v.get() <= i128::MAX);
+        let _v = BoundedI128::<{ i128::MIN }, { i128::MAX }>::arbitrary(&mut u).unwrap();
     }
 }
