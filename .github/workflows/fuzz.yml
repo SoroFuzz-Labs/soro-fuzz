@@ -1,0 +1,70 @@
+name: fuzz
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Weekly, Mondays 06:17 UTC. Off the top-of-hour to dodge GitHub's
+    # cron congestion (scheduled runs at :00 are often delayed/dropped).
+    - cron: '17 6 * * 1'
+
+# Least privilege: checkout needs read; upload-artifact uses the Actions
+# API, not the contents scope.
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: libFuzzer (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      # One target's failure shouldn't cancel the others once more are on.
+      fail-fast: false
+      matrix:
+        target:
+          - counter_fuzz
+          # Enable each once it's proven green on CI (build + short run):
+          # - token_fuzz
+          # - escrow_fuzz
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+
+      # Prebuilt cargo-fuzz binary — no `cargo install` compile step.
+      - name: Install cargo-fuzz
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+
+      # Two separate workspaces: root engine (./target) and the standalone
+      # fuzz workspace (fuzz/target). Cache both.
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            fuzz
+
+      # Build separately from run so a compile error is distinguishable
+      # from a fuzzing finding.
+      - name: Build fuzz target
+        run: cargo +nightly fuzz build ${{ matrix.target }}
+
+      # 60s per run on push/PR/dispatch; 300s on the weekly schedule.
+      - name: Run fuzz target
+        run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=${{ github.event_name == 'schedule' && 300 || 60 }}
+
+      # A crash/leak drops a reproducer in fuzz/artifacts/<target>/.
+      # Only on failure; ignore "no files" so a build failure (no artifacts)
+      # doesn't emit a spurious warning.
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}/
+          if-no-files-found: ignore
