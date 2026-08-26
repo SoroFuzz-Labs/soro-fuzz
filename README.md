@@ -1,5 +1,7 @@
 # soro-fuzz
 
+[![fuzz](https://github.com/SoroFuzz-Labs/soro-fuzz/actions/workflows/fuzz.yml/badge.svg)](https://github.com/SoroFuzz-Labs/soro-fuzz/actions/workflows/fuzz.yml)
+
 A reusable fuzzing and property-testing harness for [Soroban](https://developers.stellar.org/docs/build/smart-contracts/overview)
 contracts: declare a command model, a shadow (reference) model, and a set of
 invariants for your contract, and get both coverage-guided fuzzing
@@ -109,6 +111,18 @@ classified `UndeclaredPanic` instead of `Rejected` — see
 `crates/core/src/command.rs`'s doc comment on `Outcome::from_try_result` and
 `crates/core/tests/undeclared_panic_is_a_finding.rs` for the regression test
 proving it.
+
+## Continuous fuzzing
+
+The [`fuzz` workflow](.github/workflows/fuzz.yml) runs a coverage-guided
+libFuzzer campaign on Linux CI against the `counter` example target: a
+60-second run on every push to `master` and on pull requests, plus a longer
+5-minute run on a weekly schedule. Only `counter_fuzz` runs today —
+`token_fuzz` and `escrow_fuzz` are already wired into the workflow's matrix
+(commented out) and can be enabled once each is confirmed green. The job runs
+on Linux with a nightly toolchain (`cargo-fuzz` needs LLVM sanitizer
+coverage, which isn't available on native Windows), while the `proptest`
+mirrors under `cargo test` on stable remain the cross-platform CI suite.
 
 ## Workspace layout
 
