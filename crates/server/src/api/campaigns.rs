@@ -226,6 +226,7 @@ mod tests {
     use crate::api::router;
     use crate::store::mock::MockStore;
     use crate::targets::TargetRegistry;
+    use crate::worker::progress::ProgressHub;
 
     fn test_state() -> AppState {
         let targets_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
@@ -234,6 +235,7 @@ mod tests {
             targets: Arc::new(
                 TargetRegistry::load(&targets_dir).expect("real manifest should load"),
             ),
+            progress: Arc::new(ProgressHub::default()),
             max_time_budget_secs: 600,
         }
     }

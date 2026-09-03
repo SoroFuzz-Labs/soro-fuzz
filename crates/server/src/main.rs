@@ -74,13 +74,14 @@ async fn main() -> anyhow::Result<()> {
         store.clone(),
         runner,
         targets.clone(),
-        progress,
+        progress.clone(),
         config.fuzz_sanitizer.clone(),
     );
 
     let state = api::AppState {
         store,
         targets,
+        progress,
         max_time_budget_secs: config.job_timeout.as_secs() as i64,
     };
     let app = api::router(state);
